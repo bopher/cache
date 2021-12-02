@@ -6,50 +6,61 @@ import (
 	"github.com/bopher/utils"
 )
 
-// vcDriver verification code manager
 type vcDriver struct {
 	Key   string
 	TTL   time.Duration
 	Cache Cache
 }
 
-// Set set code
-func (vc *vcDriver) Set(value string) {
-	vc.Cache.Forget(vc.Key)
-	vc.Cache.Put(vc.Key, value, vc.TTL)
+func (this vcDriver) err(pattern string, params ...interface{}) error {
+	return utils.TaggedError([]string{"VerificationCode", this.Key}, pattern, params...)
 }
 
-// Generate generate a random numeric code with 5 character length
-func (vc *vcDriver) Generate() (string, error) {
-	val, err := utils.RandomStringFromCharset(5, "0123456789")
-	if err != nil {
-		return "", err
+func (this vcDriver) Set(value string) error {
+	if err := this.Cache.Forget(this.Key); err != nil {
+		return this.err(err.Error())
 	}
-	vc.Set(val)
-	return val, nil
-}
-
-// GenerateN generate a random numeric code with special character length
-func (vc *vcDriver) GenerateN(count uint) (string, error) {
-	val, err := utils.RandomStringFromCharset(count, "0123456789")
-	if err != nil {
-		return "", err
+	if err := this.Cache.Put(this.Key, value, this.TTL); err != nil {
+		return this.err(err.Error())
 	}
-	vc.Set(val)
-	return val, nil
+	return nil
 }
 
-// Clear clear code
-func (vc *vcDriver) Clear() {
-	vc.Cache.Forget(vc.Key)
+func (this vcDriver) Generate() (string, error) {
+	if val, err := utils.RandomStringFromCharset(5, "0123456789"); err != nil {
+		return "", this.err(err.Error())
+	} else {
+		return val, this.Set(val)
+	}
 }
 
-// Get get code
-func (vc *vcDriver) Get() string {
-	return vc.Cache.String(vc.Key, "")
+func (this vcDriver) GenerateN(count uint) (string, error) {
+	if val, err := utils.RandomStringFromCharset(count, "0123456789"); err != nil {
+		return "", err
+	} else {
+		return val, this.Set(val)
+	}
 }
 
-// Exists check if code exists
-func (vc *vcDriver) Exists() bool {
-	return vc.Cache.Exists(vc.Key)
+func (this vcDriver) Clear() error {
+	if err := this.Cache.Forget(this.Key); err != nil {
+		return this.err(err.Error())
+	}
+	return nil
+}
+
+func (this vcDriver) Get() (string, error) {
+	if v, err := this.Cache.StringE(this.Key); err != nil {
+		return "", this.err(err.Error())
+	} else {
+		return v, nil
+	}
+}
+
+func (this vcDriver) Exists() (bool, error) {
+	if exists, err := this.Cache.Exists(this.Key); err != nil {
+		return false, this.err(err.Error())
+	} else {
+		return exists, nil
+	}
 }

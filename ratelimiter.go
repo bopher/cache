@@ -5,17 +5,17 @@ import "time"
 // RateLimiter interface for rate limiter
 type RateLimiter interface {
 	// Hit decrease the allowed times
-	Hit()
+	Hit() error
 	// Lock lock rate limiter
-	Lock()
+	Lock() error
 	// Reset reset rate limiter
-	Reset()
+	Reset() error
 	// MustLock check if rate limiter must lock access
-	MustLock() bool
+	MustLock() (bool, error)
 	// TotalAttempts get user attempts count
-	TotalAttempts() uint32
+	TotalAttempts() (uint32, error)
 	// RetriesLeft get user retries left
-	RetriesLeft() uint32
+	RetriesLeft() (uint32, error)
 	// AvailableIn get time until unlock
-	AvailableIn() time.Duration
+	AvailableIn() (time.Duration, error)
 }

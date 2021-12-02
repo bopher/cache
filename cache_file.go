@@ -5,7 +5,9 @@ import (
 	"crypto/md5"
 	"encoding/gob"
 	"encoding/hex"
+	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path"
 	"time"
@@ -13,473 +15,479 @@ import (
 	"github.com/bopher/utils"
 )
 
-type cacheRecord struct {
+type record struct {
 	TTL  time.Time
 	Data interface{}
 }
 
-// Serialize data
-func (r *cacheRecord) Serialize() (string, bool) {
+func (this record) Serialize() (string, error) {
 	b := bytes.Buffer{}
 	e := gob.NewEncoder(&b)
-	err := e.Encode(*r)
+	err := e.Encode(this)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	return hex.EncodeToString(b.Bytes()), true
+	return hex.EncodeToString(b.Bytes()), nil
 }
 
-// Deserialize data
-func (r *cacheRecord) Deserialize(data string) bool {
+func (this *record) Deserialize(data string) error {
 	by, err := hex.DecodeString(data)
 	if err != nil {
-		return false
+		return err
 	}
 	b := bytes.Buffer{}
 	b.Write(by)
 	d := gob.NewDecoder(&b)
-	err = d.Decode(r)
+	err = d.Decode(this)
 	if err != nil {
-		return false
+		return err
 	}
-	return true
+	return nil
 }
 
-// IsExpired check if record is expired
-func (r *cacheRecord) IsExpired() bool {
-	return r.TTL.UTC().Before(time.Now().UTC())
+func (this record) IsExpired() bool {
+	return this.TTL.UTC().Before(time.Now().UTC())
 }
 
-// ParseAsInt64 parse data as int64
-func (r *cacheRecord) ParseAsInt64() (int64, bool) {
-	switch v := r.Data.(type) {
-	case int8:
-		return int64(v), true
-	case uint8:
-		return int64(v), true
-	case int16:
-		return int64(v), true
-	case uint16:
-		return int64(v), true
-	case int32:
-		return int64(v), true
-	case uint32:
-		return int64(v), true
-	case int:
-		return int64(v), true
-	case uint:
-		return int64(v), true
-	case int64:
-		return int64(v), true
-	case uint64:
-		return int64(v), true
-	case float32:
-		return int64(v), true
-	case float64:
-		return int64(v), true
-	default:
-		return 0, false
-	}
-}
-
-// ParseAsUint64 parse data as uint64
-func (r *cacheRecord) ParseAsUint64() (uint64, bool) {
-	switch v := r.Data.(type) {
-	case int8:
-		return uint64(v), true
-	case uint8:
-		return uint64(v), true
-	case int16:
-		return uint64(v), true
-	case uint16:
-		return uint64(v), true
-	case int32:
-		return uint64(v), true
-	case uint32:
-		return uint64(v), true
-	case int:
-		return uint64(v), true
-	case uint:
-		return uint64(v), true
-	case int64:
-		return uint64(v), true
-	case uint64:
-		return uint64(v), true
-	case float32:
-		return uint64(v), true
-	case float64:
-		return uint64(v), true
-	default:
-		return 0, false
-	}
-}
-
-// ParseAsFloat64 parse data as float64
-func (r *cacheRecord) ParseAsFloat64() (float64, bool) {
-	switch v := r.Data.(type) {
-	case int8:
-		return float64(v), true
-	case uint8:
-		return float64(v), true
-	case int16:
-		return float64(v), true
-	case uint16:
-		return float64(v), true
-	case int32:
-		return float64(v), true
-	case uint32:
-		return float64(v), true
-	case int:
-		return float64(v), true
-	case uint:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case uint64:
-		return float64(v), true
-	case float32:
-		return float64(v), true
-	case float64:
-		return float64(v), true
-	default:
-		return 0, false
-	}
-}
-
-type fileCache struct {
+type fCache struct {
 	prefix string
 	dir    string
 }
 
-func (c *fileCache) init(prefix string, dir string) {
-	c.prefix = prefix
-	c.dir = dir
+func (this *fCache) init(prefix string, dir string) {
+	this.prefix = prefix
+	this.dir = dir
 }
 
-func (c *fileCache) pathResolver(key string) string {
+func (this fCache) err(pattern string, params ...interface{}) error {
+	return utils.TaggedError([]string{"FileCache"}, pattern, params...)
+}
+
+func (this fCache) pathResolver(key string) string {
 	hasher := md5.New()
-	hasher.Write([]byte(c.prefix + "-" + key))
+	hasher.Write([]byte(utils.ConcatStr("-", this.prefix, key)))
 	fileName := hex.EncodeToString(hasher.Sum(nil))
-	fileName = path.Join(c.dir, fileName)
+	fileName = path.Join(this.dir, fileName)
 	return fileName
 }
 
-func (c *fileCache) read(key string) (*cacheRecord, bool) {
-	bytes, err := ioutil.ReadFile(c.pathResolver(key))
-	if err != nil {
-		return nil, false
+func (this fCache) delete(key string) error {
+	if err := os.Remove(this.pathResolver(key)); err != nil {
+		return this.err(err.Error())
 	}
-	rec := cacheRecord{}
-	if !rec.Deserialize(string(bytes)) {
-		return nil, false
+	return nil
+}
+
+func (this fCache) read(key string) (*record, error) {
+	bytes, err := ioutil.ReadFile(this.pathResolver(key))
+	if err != nil {
+		return nil, this.err(err.Error())
+	}
+
+	rec := record{}
+	if err := rec.Deserialize(string(bytes)); err != nil {
+		return nil, this.err(err.Error())
 	}
 
 	if rec.IsExpired() {
-		c.delete(key)
-		return nil, false
-	}
-
-	return &rec, true
-}
-
-func (c *fileCache) write(key string, record cacheRecord) bool {
-	utils.CreateDirectory(c.dir)
-	encoded, ok := record.Serialize()
-	if ok {
-		err := ioutil.WriteFile(c.pathResolver(key), []byte(encoded), 0644)
-		if err == nil {
-			return true
+		err := this.delete(key)
+		if err != nil {
+			err = this.err(err.Error())
 		}
+		return nil, err
 	}
-	return false
+
+	return &rec, nil
 }
 
-func (c *fileCache) delete(key string) bool {
-	return os.Remove(c.pathResolver(key)) == nil
+func (this fCache) write(key string, record record) error {
+	err := utils.CreateDirectory(this.dir)
+	if err != nil {
+		return this.err(err.Error())
+	}
+
+	encoded, err := record.Serialize()
+	if err != nil {
+		return this.err(err.Error())
+	}
+
+	err = ioutil.WriteFile(this.pathResolver(key), []byte(encoded), 0644)
+	if err != nil {
+		return this.err(err.Error())
+	}
+
+	return nil
 }
 
-// Put a new value to cache
-func (c *fileCache) Put(key string, value interface{}, ttl time.Duration) bool {
-	record := cacheRecord{
+func (this fCache) Put(key string, value interface{}, ttl time.Duration) error {
+	rec := record{
 		TTL:  time.Now().UTC().Add(ttl),
 		Data: value,
 	}
-	return c.write(key, record)
+	return this.write(key, rec)
 }
 
-// PutForever put value with infinite ttl
-func (c *fileCache) PutForever(key string, value interface{}) bool {
-	record := cacheRecord{
-		TTL:  time.Now().UTC().AddDate(100, 0, 0),
+func (this fCache) PutForever(key string, value interface{}) error {
+	rec := record{
+		TTL:  time.Unix(math.MaxInt64, 0),
 		Data: value,
 	}
-	return c.write(key, record)
+	return this.write(key, rec)
 }
 
-// Set Change value of cache item
-func (c *fileCache) Set(key string, value interface{}) bool {
-	rec, exists := c.read(key)
-	if exists {
-		rec.Data = value
-		return c.write(key, *rec)
+func (this fCache) Set(key string, value interface{}) error {
+	rec, err := this.read(key)
+	if err != nil {
+		return err
 	}
-	return false
+
+	rec.Data = value
+	return this.write(key, *rec)
 }
 
-// Get item from cache
-func (c *fileCache) Get(key string) interface{} {
-	rec, exists := c.read(key)
-	if exists {
-		return rec.Data
+func (this fCache) Get(key string) (interface{}, error) {
+	rec, err := this.read(key)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+
+	return rec.Data, nil
 }
 
-// Pull item from cache and remove it
-func (c *fileCache) Pull(key string) interface{} {
-	defer c.delete(key)
-	rec, exists := c.read(key)
-	if exists {
-		return rec.Data
+func (this fCache) Exists(key string) (bool, error) {
+	_, err := this.read(key)
+	if err != nil {
+		return false, err
 	}
-	return nil
+
+	return true, nil
 }
 
-// Check if item exists in cache
-func (c *fileCache) Exists(key string) bool {
-	_, exists := c.read(key)
-	return exists
+func (this fCache) Forget(key string) error {
+	return this.delete(key)
 }
 
-// Forget item from cache (delete item)
-func (c *fileCache) Forget(key string) bool {
-	return c.delete(key)
-}
-
-// TTL get cache item ttl
-func (c *fileCache) TTL(key string) time.Duration {
-	rec, exists := c.read(key)
-	if exists {
-		return time.Now().UTC().Sub(rec.TTL.UTC())
+func (this fCache) Pull(key string) (interface{}, error) {
+	if v, err := this.Get(key); err != nil {
+		return nil, err
+	} else {
+		return v, this.delete(key)
 	}
-	return 0
 }
 
-// Bool parse dependency as boolean
-func (c *fileCache) Bool(key string, fallback bool) bool {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.Data.(bool); ok {
-			return res
+func (this fCache) TTL(key string) (time.Duration, error) {
+	rec, err := this.read(key)
+	if err != nil {
+		return 0, err
+	}
+
+	return time.Now().UTC().Sub(rec.TTL.UTC()), nil
+}
+
+func (this fCache) BoolE(key string) (bool, error) {
+	if vs, err := this.Get(key); err != nil {
+		return false, err
+	} else {
+		if v, err := utils.CastBoolE(vs); err != nil {
+			return false, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Bool(key string, fallback bool) bool {
+	if v, err := this.BoolE(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Int parse dependency as int
-func (c *fileCache) Int(key string, fallback int) int {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsInt64(); ok {
-			return int(res)
+func (this fCache) IntE(key string) (int, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastIntE(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Int(key string, fallback int) int {
+	if v, err := this.IntE(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Int8 parse dependency as int8
-func (c *fileCache) Int8(key string, fallback int8) int8 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsInt64(); ok {
-			return int8(res)
+func (this fCache) Int8E(key string) (int8, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastInt8E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Int8(key string, fallback int8) int8 {
+	if v, err := this.Int8E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Int16 parse dependency as int16
-func (c *fileCache) Int16(key string, fallback int16) int16 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsInt64(); ok {
-			return int16(res)
+func (this fCache) Int16E(key string) (int16, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastInt16E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Int16(key string, fallback int16) int16 {
+	if v, err := this.Int16E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Int32 parse dependency as int32
-func (c *fileCache) Int32(key string, fallback int32) int32 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsInt64(); ok {
-			return int32(res)
+func (this fCache) Int32E(key string) (int32, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastInt32E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Int32(key string, fallback int32) int32 {
+	if v, err := this.Int32E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Int64 parse dependency as int64
-func (c *fileCache) Int64(key string, fallback int64) int64 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsInt64(); ok {
-			return res
+func (this fCache) Int64E(key string) (int64, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastInt64E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Int64(key string, fallback int64) int64 {
+	if v, err := this.Int64E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// UInt parse dependency as uint
-func (c *fileCache) UInt(key string, fallback uint) uint {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsUint64(); ok {
-			return uint(res)
+func (this fCache) UIntE(key string) (uint, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastUIntE(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) UInt(key string, fallback uint) uint {
+	if v, err := this.UIntE(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// UInt8 parse dependency as uint8
-func (c *fileCache) UInt8(key string, fallback uint8) uint8 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsUint64(); ok {
-			return uint8(res)
+func (this fCache) UInt8E(key string) (uint8, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastUInt8E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) UInt8(key string, fallback uint8) uint8 {
+	if v, err := this.UInt8E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// UInt16 parse dependency as uint16
-func (c *fileCache) UInt16(key string, fallback uint16) uint16 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsUint64(); ok {
-			return uint16(res)
+func (this fCache) UInt16E(key string) (uint16, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastUInt16E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) UInt16(key string, fallback uint16) uint16 {
+	if v, err := this.UInt16E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// UInt32 parse dependency as uint32
-func (c *fileCache) UInt32(key string, fallback uint32) uint32 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsUint64(); ok {
-			return uint32(res)
+func (this fCache) UInt32E(key string) (uint32, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastUInt32E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) UInt32(key string, fallback uint32) uint32 {
+	if v, err := this.UInt32E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// UInt64 parse dependency as uint64
-func (c *fileCache) UInt64(key string, fallback uint64) uint64 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsUint64(); ok {
-			return uint64(res)
+func (this fCache) UInt64E(key string) (uint64, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastUInt64E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) UInt64(key string, fallback uint64) uint64 {
+	if v, err := this.UInt64E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Float32 parse dependency as float64
-func (c *fileCache) Float32(key string, fallback float32) float32 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsFloat64(); ok {
-			return float32(res)
+func (this fCache) Float64E(key string) (float64, error) {
+	if vs, err := this.Get(key); err != nil {
+		return 0, err
+	} else {
+		if v, err := utils.CastFloat64E(vs); err != nil {
+			return 0, this.err(err.Error())
+		} else {
+			return v, nil
 		}
+	}
+}
+
+func (this fCache) Float64(key string, fallback float64) float64 {
+	if v, err := this.Float64E(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// Float64 parse dependency as float64
-func (c *fileCache) Float64(key string, fallback float64) float64 {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsFloat64(); ok {
-			return res
+func (this fCache) StringE(key string) (string, error) {
+	if vs, err := this.Get(key); err != nil {
+		return "", err
+	} else {
+		if vs != nil {
+			return fmt.Sprint(vs), nil
 		}
+	}
+	return "", this.err("cant get %s as string!", key)
+}
+
+func (this fCache) String(key string, fallback string) string {
+	if v, err := this.StringE(key); err == nil {
+		return v
 	}
 	return fallback
 }
 
-// String parse dependency as string
-func (c *fileCache) String(key string, fallback string) string {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.Data.(string); ok {
-			return res
-		}
-	}
-	return fallback
-}
-
-// Bytes parse dependency as bytes array
-func (c *fileCache) Bytes(key string, fallback []byte) []byte {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.Data.([]byte); ok {
-			return res
-		}
-	}
-	return fallback
-}
-
-// Increment numeric item in cache
-func (c *fileCache) Increment(key string) bool {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsFloat64(); ok {
-			return c.Set(key, res+1)
-		}
-	}
-	return false
-}
-
-// IncrementBy numeric item in cache by number
-func (c *fileCache) IncrementBy(key string, value interface{}) bool {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsFloat64(); ok {
-			temp := cacheRecord{
-				Data: value,
+func (this fCache) IncrementBy(key string, value interface{}) error {
+	var err error = nil
+	switch value.(type) {
+	case float32, float64:
+		org, err := this.Float64E(key)
+		if err == nil {
+			v, err := utils.CastFloat64E(value)
+			if err == nil {
+				return this.Set(key, org+v)
+			} else {
+				err = this.err(err.Error())
 			}
-			if val, ok := temp.ParseAsFloat64(); ok {
-				return c.Set(key, res+val)
+		}
+	default:
+		org, err := this.Int64E(key)
+		if err == nil {
+			v, err := utils.CastInt64E(value)
+			if err == nil {
+				return this.Set(key, org+v)
+			} else {
+				err = this.err(err.Error())
 			}
 		}
 	}
-	return false
+	return err
 }
 
-// Decrement numeric item in cache
-func (c *fileCache) Decrement(key string) bool {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsFloat64(); ok {
-			return c.Set(key, res-1)
-		}
-	}
-	return false
+func (this fCache) Increment(key string) error {
+	return this.IncrementBy(key, 1)
 }
 
-// DecrementBy numeric item in cache by number
-func (c *fileCache) DecrementBy(key string, value interface{}) bool {
-	rec, exists := c.read(key)
-	if exists {
-		if res, ok := rec.ParseAsFloat64(); ok {
-			temp := cacheRecord{
-				Data: value,
+func (this fCache) DecrementBy(key string, value interface{}) error {
+	var err error = nil
+	switch value.(type) {
+	case float32, float64:
+		org, err := this.Float64E(key)
+		if err == nil {
+			v, err := utils.CastFloat64E(value)
+			if err == nil {
+				return this.Set(key, org-v)
+			} else {
+				err = this.err(err.Error())
 			}
-			if val, ok := temp.ParseAsFloat64(); ok {
-				return c.Set(key, res-val)
+		}
+	default:
+		org, err := this.Int64E(key)
+		if err == nil {
+			v, err := utils.CastInt64E(value)
+			if err == nil {
+				return this.Set(key, org-v)
+			} else {
+				err = this.err(err.Error())
 			}
 		}
 	}
-	return false
+	return err
+}
+
+func (this fCache) Decrement(key string) error {
+	return this.DecrementBy(key, 1)
 }
