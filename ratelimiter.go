@@ -10,6 +10,8 @@ type RateLimiter interface {
 	Lock() error
 	// Reset reset rate limiter
 	Reset() error
+	// Clear remove rate limiter record
+	Clear() error
 	// MustLock check if rate limiter must lock access
 	MustLock() (bool, error)
 	// TotalAttempts get user attempts count

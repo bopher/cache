@@ -31,10 +31,11 @@ func NewRateLimiter(key string, maxAttempts uint32, ttl time.Duration, cache Cac
 }
 
 // NewVerificationCode create a new verification code manager instance
-func NewVerificationCode(key string, ttl time.Duration, cache Cache) VerificationCode {
+func NewVerificationCode(key string, ttl time.Duration, cache Cache) (VerificationCode, error) {
 	vc := new(vcDriver)
-	vc.Key = key
-	vc.TTL = ttl
-	vc.Cache = cache
-	return vc
+	if err := vc.init(key, ttl, cache); err != nil {
+		return nil, err
+	} else {
+		return vc, nil
+	}
 }

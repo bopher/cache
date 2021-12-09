@@ -7,19 +7,25 @@ import (
 )
 
 type rLimiter struct {
-	Key   string
-	Max   uint32
-	Cache Cache
+	key   string
+	max   uint32
+	ttl   time.Duration
+	cache Cache
 }
 
 func (this rLimiter) err(pattern string, params ...interface{}) error {
-	return utils.TaggedError([]string{"RateLimiter", this.Key}, pattern, params...)
+	return utils.TaggedError([]string{"RateLimiter", this.key}, pattern, params...)
+}
+
+func (this rLimiter) notExistsErr() error {
+	return utils.TaggedError([]string{"RateLimiter", "NotExists", this.key}, "%s not exists", this.key)
 }
 
 func (this *rLimiter) init(key string, maxAttempts uint32, ttl time.Duration, cache Cache) error {
-	this.Key = key
-	this.Max = maxAttempts
-	this.Cache = cache
+	this.key = key
+	this.max = maxAttempts
+	this.ttl = ttl
+	this.cache = cache
 
 	exists, err := cache.Exists(key)
 	if err != nil {
@@ -34,69 +40,109 @@ func (this *rLimiter) init(key string, maxAttempts uint32, ttl time.Duration, ca
 }
 
 func (this rLimiter) Hit() error {
-	if i, err := this.Cache.IntE(this.Key); err != nil {
+	exists, err := this.cache.Decrement(this.key, 1)
+	if err != nil {
 		return this.err(err.Error())
-	} else {
-		if i > 0 {
-			if err := this.Cache.Decrement(this.Key); err != nil {
-				return this.err(err.Error())
-			}
-		}
+	}
+
+	if !exists {
+		return this.notExistsErr()
 	}
 	return nil
 }
 
 func (this rLimiter) Lock() error {
-	if exists, err := this.Cache.Exists(this.Key); err != nil {
+	exists, err := this.cache.Set(this.key, 0)
+	if err != nil {
 		return this.err(err.Error())
-	} else if exists {
-		if err := this.Cache.Set(this.Key, 0); err != nil {
-			return this.err(err.Error())
-		}
 	}
+
+	if !exists {
+		return this.notExistsErr()
+	}
+
 	return nil
 }
 
 func (this rLimiter) Reset() error {
-	if err := this.Cache.Forget(this.Key); err != nil {
+	err := this.cache.Put(this.key, this.max, this.ttl)
+	if err != nil {
 		return this.err(err.Error())
 	}
+
+	return nil
+}
+
+func (this rLimiter) Clear() error {
+	err := this.cache.Forget(this.key)
+	if err != nil {
+		return this.err(err.Error())
+	}
+
 	return nil
 }
 
 func (this rLimiter) MustLock() (bool, error) {
-	if v, err := this.Cache.IntE(this.Key); err != nil {
-		return false, this.err(err.Error())
-	} else {
-		return v <= 0, nil
+	caster, err := this.cache.Cast(this.key)
+	if err != nil {
+		return true, this.err(err.Error())
 	}
+
+	if caster.IsNil() {
+		return false, nil
+	}
+
+	v, err := caster.Int()
+	if err != nil {
+		err = this.err(err.Error())
+	}
+	return v <= 0, err
 }
 
 func (this rLimiter) TotalAttempts() (uint32, error) {
-	i, err := this.Cache.IntE(this.Key)
+	caster, err := this.cache.Cast(this.key)
 	if err != nil {
-		return 0, this.err(err.Error())
-	}
-	if i < 0 {
-		i = 0
-	}
-	if uint32(i) > this.Max {
-		i = int(this.Max)
+		return this.max, this.err(err.Error())
 	}
 
-	return this.Max - uint32(i), nil
+	if caster.IsNil() {
+		return this.max, nil
+	}
+
+	v, err := caster.Int()
+	if err != nil {
+		return this.max, this.err(err.Error())
+	}
+
+	if v > int(this.max) {
+		v = int(this.max)
+	}
+
+	return this.max - uint32(v), nil
 }
 
 func (this rLimiter) RetriesLeft() (uint32, error) {
-	if v, err := this.Cache.UInt32E(this.Key); err != nil {
+	caster, err := this.cache.Cast(this.key)
+	if err != nil {
 		return 0, this.err(err.Error())
-	} else {
-		return v, nil
 	}
+
+	if caster.IsNil() {
+		return 0, nil
+	}
+
+	v, err := caster.Int()
+	if err != nil {
+		err = this.err(err.Error())
+	}
+	if v < 0 {
+		v = 0
+	}
+	return uint32(v), err
 }
 
 func (this rLimiter) AvailableIn() (time.Duration, error) {
-	if v, err := this.Cache.TTL(this.Key); err != nil {
+	if v, err := this.cache.TTL(this.key); err != nil {
 		return 0, this.err(err.Error())
 	} else {
 		return v, nil

@@ -1,6 +1,6 @@
 # Cache
 
-Cache manager with default file and redis driver. this package contains rate limiter and verification code driver.
+Cache manager with default file and redis driver (rate limiter and verification code manager included).
 
 ## Create New Cache Driver
 
@@ -42,7 +42,7 @@ Cache interface contains following methods:
 
 ### Put
 
-Put a new value to cache.
+A new value to cache.
 
 ```go
 // Signature:
@@ -54,31 +54,33 @@ err := rCache.Put("total-debt", 410203, 100 * time.Hour)
 
 ### PutForever
 
-Put a new value to cache with infinite ttl.
+Put value with infinite ttl.
 
 ```go
 // Signature:
 PutForever(key string, value interface{}) error
 
 // Example:
-err := rCache.PutForever("total-users", 5000000)
+err := rCache.PutForever("base-discount", 10)
 ```
 
 ### Set
 
-Change value of cache item (keep ttl).
+Change value of cache item and return false if item not exists (this. methods keep cache ttl).
+
+**Cation:** set value on non exists item will generate error. please check if item exists before set or use put method instead!
 
 ```go
 // Signature:
-Set(key string, value interface{}) error
+Set(key string, value interface{}) (bool, error)
 
 // Example:
-err := rCache.Set("total-users", 5005)
+ok, err := rCache.Set("base-discount", 15)
 ```
 
 ### Get
 
-Get item from cache. Get function return cache item as `interface{}`. if you need get cache item with type use helper get functions described later.
+Get item from cache.
 
 ```go
 // Signature:
@@ -90,7 +92,7 @@ v, err := rCache.Get("total-users")
 
 ### Exists
 
-Check if item exists in cache
+Check if item exists in cache.
 
 ```go
 // Signature:
@@ -102,7 +104,7 @@ exists, err := rCache.Exists("total-users");
 
 ### Forget
 
-Delete item from cache.
+Delete Item from cache.
 
 ```go
 // Signature:
@@ -114,7 +116,7 @@ err := rCache.Forget("total-users")
 
 ### Pull
 
-Get item from cache and remove it
+Item from cache and then remove it.
 
 ```go
 // Signature:
@@ -126,7 +128,7 @@ v, err := rCache.Pull("total-users")
 
 ### TTL
 
-Get cache item ttl.
+Get cache item ttl. This method returns -1 if item not exists.
 
 ```go
 // Signature:
@@ -136,142 +138,65 @@ TTL(key string) (time.Duration, error)
 ttl, err := rCache.TTL("total-users")
 ```
 
-### IncrementBy
+### Cast
 
-Increment numeric item in cache by number.
+Parse cache item as caster.
 
 ```go
 // Signature:
-IncrementBy(key string, value interface{}) error
+Cast(key string) (caster.Caster, error)
 
 // Example:
-err := rCache.IncrementBy("total-users", 10)
+c, err := rCache.Cast("total-users")
+v, err := c.Int32()
+```
+
+### IncrementFloat
+
+Increment numeric item by float, return false if item not exists
+
+```go
+// Signature:
+IncrementFloat(key string, value float64) (bool, error)
+
+// Example:
+err := rCache.IncrementFloat("some-float", 0.01)
 ```
 
 ### Increment
 
-Increment numeric item in cache.
+Increment numeric item by int, return false if item not exists
 
 ```go
 // Signature:
-Increment(key string) error
+Increment(key string, value int64) (bool, error)
 
 // Example:
-err := rCache.Increment("total-users")
+err := rCache.Increment("some-number", 10)
 ```
 
-### DecrementBy
+### DecrementFloat
 
-Decrement numeric item in cache by number.
+Decrement numeric item by float, return false if item not exists
 
 ```go
 // Signature:
-DecrementBy(key string, value interface{}) error
+DecrementFloat(key string, value float64) (bool, error)
 
 // Example:
-err := rCache.DecrementBy("total-users", 10)
+err := rCache.DecrementFloat("some-float", 0.29)
 ```
 
 ### Decrement
 
-Decrement numeric item in cache.
+Decrement numeric item by int, return false if item not exists
 
 ```go
 // Signature:
-Decrement(key string) error
+Decrement(key string, value int64) (bool, error)
 
 // Example:
-err := rCache.Decrement("total-users")
-```
-
-### Getters
-
-Getters function allow you to cast cache item directly as type. Getters item return error when item not exists or type cast failed!
-
-```go
-// BoolE parse item as boolean or return error on fail
-BoolE(key string) (bool, error)
-
-// IntE parse item as int or return error on fail
-IntE(key string) (int, error)
-
-// Int8E parse item as int8 or return error on fail
-Int8E(key string) (int8, error)
-
-// Int16E parse item as int16 or return error on fail
-Int16E(key string) (int16, error)
-
-// Int32E parse item as int32 or return error on fail
-Int32E(key string) (int32, error)
-
-// Int64E parse item as int64 or return error on fail
-Int64E(key string) (int64, error)
-
-// UIntE parse item as uint or return error on fail
-UIntE(key string) (uint, error)
-
-// UInt8E parse item as uint8 or return error on fail
-UInt8E(key string) (uint8, error)
-
-// UInt16E parse item as uint16 or return error on fail
-UInt16E(key string) (uint16, error)
-
-// UInt32E parse item as uint32 or return error on fail
-UInt32E(key string) (uint32, error)
-
-// UInt64E parse item as uint64 or return error on fail
-UInt64E(key string) (uint64, error)
-
-// Float64E parse item as float64 or return error on fail
-Float64E(key string) (float64, error)
-
-// StringE parse item as string or return error on fail
-StringE(key string) (string, error)
-```
-
-### Error Safe Getters
-
-You can use safe getters to cast cache item and pass fallback value in case of item casting failed!
-
-```go
-// Bool parse item as boolean or return fallback
-Bool(key string, fallback bool) bool
-
-// Int parse item as int or return fallback
-Int(key string, fallback int) int
-
-// Int8 parse item as int8 or return fallback
-Int8(key string, fallback int8) int8
-
-// Int16 parse item as int16  or return fallback
-Int16(key string, fallback int16) int16
-
-// Int32 parse item as int32 or return fallback
-Int32(key string, fallback int32) int32
-
-// Int64 parse item as int64 or return fallback
-Int64(key string, fallback int64) int64
-
-// UInt parse item as uint or return fallback
-UInt(key string, fallback uint) uint
-
-// UInt8 parse item as uint8 or return fallback
-UInt8(key string, fallback uint8) uint8
-
-// UInt16 parse item as uint16 or return fallback
-UInt16(key string, fallback uint16) uint16
-
-// UInt32 parse item as uint32 or return fallback
-UInt32(key string, fallback uint32) uint32
-
-// UInt64 parse item as uint64 or return fallback
-UInt64(key string, fallback uint64) uint64
-
-// Float64 parse item as float64 or return fallback
-Float64(key string, fallback float64) float64
-
-// String parse item as string or return fallback
-String(key string, fallback string) string
+err := rCache.Decrement("total-try", 1)
 ```
 
 ## Create New Rate Limiter Driver
@@ -287,11 +212,11 @@ import "github.com/bopher/cache"
 limiter, err := cache.NewRateLimiter("login-attempts", 3, 60 * time.Second, rCache)
 ```
 
-## Usage
+### Usage
 
 Rate limiter interface contains following methods:
 
-### Hit
+#### Hit
 
 Decrease the allowed times.
 
@@ -315,9 +240,9 @@ Lock() error
 err := limiter.Lock() // no more attempts left
 ```
 
-### Reset
+#### Reset
 
-Reset rate limiter.
+Reset rate limiter (clear total attempts).
 
 ```go
 // Signature:
@@ -327,7 +252,19 @@ Reset() error
 err := limiter.Reset()
 ```
 
-### MustLock
+#### Clear
+
+Remove rate limiter record. call any method after clear with generate `"NotExists"` error!
+
+```go
+// Signature:
+Clear() error
+
+// Example:
+err := limiter.Clear()
+```
+
+#### MustLock
 
 Check if rate limiter must lock access.
 
@@ -341,7 +278,7 @@ if locked, _:= limiter.MustLock(), locked {
 }
 ```
 
-### TotalAttempts
+#### TotalAttempts
 
 Get user attempts count.
 
@@ -353,7 +290,7 @@ TotalAttempts() (uint32, error)
 totalAtt, err := limiter.TotalAttempts() // 3
 ```
 
-### RetriesLeft
+#### RetriesLeft
 
 Get user retries left.
 
@@ -365,7 +302,7 @@ RetriesLeft() (uint32, error)
 leftRet, err := limiter.RetriesLeft() // 2
 ```
 
-### AvailableIn
+#### AvailableIn
 
 Get time until unlock.
 
@@ -385,18 +322,18 @@ verification code used for managing verification code sent to user.
 
 ```go
 // Signature:
-NewVerificationCode(key string, ttl time.Duration, cache Cache) VerificationCode
+NewVerificationCode(key string, ttl time.Duration, cache Cache) (VerificationCode, error)
 
 // Example:
 import "github.com/bopher/cache"
-vCode := cache.NewVerificationCode("phone-verification", 5 * time.Minute, rCache)
+vCode, err := cache.NewVerificationCode("phone-verification", 5 * time.Minute, rCache)
 ```
 
-## Usage
+### Usage
 
 Verification code interface contains following methods:
 
-### Set
+#### Set
 
 Set code. You can set code directly or use generator methods.
 
@@ -408,7 +345,7 @@ Set(value string) error
 err := vCode.Set("ABD531")
 ```
 
-### Generate
+#### Generate
 
 Generate a random numeric code with 5 character length and set as code.
 
@@ -420,7 +357,7 @@ Generate() (string, error)
 code, err := vCode.Generate()
 ```
 
-### GenerateN
+#### GenerateN
 
 Generate a random numeric code with special character length and set as code.
 
@@ -432,7 +369,7 @@ GenerateN(count uint) (string, error)
 code, err := vCode.GenerateN(6)
 ```
 
-### Clear
+#### Clear
 
 Clear code from cache.
 
@@ -444,7 +381,7 @@ Clear() error
 err := vCode.Clear()
 ```
 
-### Get
+#### Get
 
 Get code.
 
@@ -456,7 +393,7 @@ Get() (string, error)
 code, err := vCode.Get()
 ```
 
-### Exists
+#### Exists
 
 Exists check if code exists in cache and not empty.
 
