@@ -8,25 +8,24 @@ import (
 
 type vcDriver struct {
 	key   string
-	ttl   time.Duration
 	cache Cache
 }
 
-func (this vcDriver) err(pattern string, params ...interface{}) error {
-	return utils.TaggedError([]string{"VerificationCode", this.key}, pattern, params...)
+func (vc vcDriver) err(pattern string, params ...interface{}) error {
+	return utils.TaggedError([]string{"VerificationCode", vc.key}, pattern, params...)
 }
 
-func (this vcDriver) notExistsErr() error {
-	return utils.TaggedError([]string{"VerificationCode", "NotExists", this.key}, "%s not exists", this.key)
+func (vc vcDriver) notExistsErr() error {
+	return utils.TaggedError([]string{"VerificationCode", "NotExists", vc.key}, "%s not exists", vc.key)
 }
 
-func (this *vcDriver) init(key string, ttl time.Duration, cache Cache) error {
-	this.key = key
-	this.cache = cache
+func (vc *vcDriver) init(key string, ttl time.Duration, cache Cache) error {
+	vc.key = key
+	vc.cache = cache
 
 	exists, err := cache.Exists(key)
 	if err != nil {
-		return this.err(err.Error())
+		return vc.err(err.Error())
 	}
 
 	if !exists {
@@ -36,63 +35,71 @@ func (this *vcDriver) init(key string, ttl time.Duration, cache Cache) error {
 	return nil
 }
 
-func (this vcDriver) Set(value string) error {
-	exists, err := this.cache.Set(this.key, value)
+func (vc vcDriver) Set(value string) error {
+	exists, err := vc.cache.Set(vc.key, value)
 	if err != nil {
-		return this.err(err.Error())
+		return vc.err(err.Error())
 	}
 
 	if !exists {
-		return this.notExistsErr()
+		return vc.notExistsErr()
 	}
 	return nil
 }
 
-func (this vcDriver) Generate() (string, error) {
+func (vc vcDriver) Generate() (string, error) {
 	if val, err := utils.RandomStringFromCharset(5, "0123456789"); err != nil {
-		return "", this.err(err.Error())
+		return "", vc.err(err.Error())
 	} else {
-		return val, this.Set(val)
+		return val, vc.Set(val)
 	}
 }
 
-func (this vcDriver) GenerateN(count uint) (string, error) {
+func (vc vcDriver) GenerateN(count uint) (string, error) {
 	if val, err := utils.RandomStringFromCharset(count, "0123456789"); err != nil {
 		return "", err
 	} else {
-		return val, this.Set(val)
+		return val, vc.Set(val)
 	}
 }
 
-func (this vcDriver) Clear() error {
-	if err := this.cache.Forget(this.key); err != nil {
-		return this.err(err.Error())
+func (vc vcDriver) Clear() error {
+	if err := vc.cache.Forget(vc.key); err != nil {
+		return vc.err(err.Error())
 	}
 	return nil
 }
 
-func (this vcDriver) Get() (string, error) {
-	caster, err := this.cache.Cast(this.key)
+func (vc vcDriver) Get() (string, error) {
+	caster, err := vc.cache.Cast(vc.key)
 	if err != nil {
-		return "", this.err(err.Error())
+		return "", vc.err(err.Error())
 	}
 
 	if caster.IsNil() {
-		return "", this.notExistsErr()
+		return "", vc.notExistsErr()
 	}
 
 	v, err := caster.String()
 	if err != nil {
-		err = this.err(err.Error())
+		err = vc.err(err.Error())
 	}
 
 	return v, err
 }
 
-func (this vcDriver) Exists() (bool, error) {
-	exists, err := this.cache.Exists(this.key)
+func (vc vcDriver) Exists() (bool, error) {
+	exists, err := vc.cache.Exists(vc.key)
 	if err != nil {
-		err = this.err(err.Error())
+		err = vc.err(err.Error())
 	}
 	return exists, err
+}
+
+func (vc vcDriver) TTL() (time.Duration, error) {
+	if v, err := vc.cache.TTL(vc.key); err != nil {
+		return 0, vc.err(err.Error())
+	} else {
+		return v, nil
+	}
 }

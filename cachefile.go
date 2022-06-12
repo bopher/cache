@@ -19,49 +19,49 @@ type fCache struct {
 	dir    string
 }
 
-func (this fCache) err(pattern string, params ...interface{}) error {
+func (rc fCache) err(pattern string, params ...interface{}) error {
 	return utils.TaggedError([]string{"FileCache"}, pattern, params...)
 }
 
-func (this *fCache) init(prefix string, dir string) {
-	this.prefix = prefix
-	this.dir = dir
+func (rc *fCache) init(prefix string, dir string) {
+	rc.prefix = prefix
+	rc.dir = dir
 }
 
-func (this fCache) hashPath(key string) string {
+func (rc fCache) hashPath(key string) string {
 	hasher := md5.New()
-	hasher.Write([]byte(utils.ConcatStr("-", this.prefix, key)))
+	hasher.Write([]byte(utils.ConcatStr("-", rc.prefix, key)))
 	fileName := hex.EncodeToString(hasher.Sum(nil))
-	fileName = path.Join(this.dir, fileName)
+	fileName = path.Join(rc.dir, fileName)
 	return fileName
 }
 
-func (this fCache) delete(key string) error {
-	if err := os.Remove(this.hashPath(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return this.err(err.Error())
+func (rc fCache) delete(key string) error {
+	if err := os.Remove(rc.hashPath(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return rc.err(err.Error())
 	}
 	return nil
 }
 
-func (this fCache) read(key string) (*record, error) {
-	bytes, err := ioutil.ReadFile(this.hashPath(key))
+func (rc fCache) read(key string) (*record, error) {
+	bytes, err := ioutil.ReadFile(rc.hashPath(key))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 
 	if err != nil {
-		return nil, this.err(err.Error())
+		return nil, rc.err(err.Error())
 	}
 
 	rec := record{}
 	if err := rec.Deserialize(string(bytes)); err != nil {
-		return nil, this.err(err.Error())
+		return nil, rc.err(err.Error())
 	}
 
 	if rec.IsExpired() {
-		err := this.delete(key)
+		err := rc.delete(key)
 		if err != nil {
-			err = this.err(err.Error())
+			err = rc.err(err.Error())
 		}
 		return nil, err
 	}
@@ -69,53 +69,53 @@ func (this fCache) read(key string) (*record, error) {
 	return &rec, nil
 }
 
-func (this fCache) write(key string, record record) error {
-	err := utils.CreateDirectory(this.dir)
+func (rc fCache) write(key string, record record) error {
+	err := utils.CreateDirectory(rc.dir)
 	if err != nil {
-		return this.err(err.Error())
+		return rc.err(err.Error())
 	}
 
 	encoded, err := record.Serialize()
 	if err != nil {
-		return this.err(err.Error())
+		return rc.err(err.Error())
 	}
 
-	err = ioutil.WriteFile(this.hashPath(key), []byte(encoded), 0644)
+	err = ioutil.WriteFile(rc.hashPath(key), []byte(encoded), 0644)
 	if err != nil {
-		return this.err(err.Error())
+		return rc.err(err.Error())
 	}
 
 	return nil
 }
 
-func (this fCache) Put(key string, value interface{}, ttl time.Duration) error {
+func (rc fCache) Put(key string, value interface{}, ttl time.Duration) error {
 	rec := record{
 		TTL:  time.Now().UTC().Add(ttl),
 		Data: value,
 	}
-	return this.write(key, rec)
+	return rc.write(key, rec)
 }
 
-func (this fCache) PutForever(key string, value interface{}) error {
+func (rc fCache) PutForever(key string, value interface{}) error {
 	rec := record{
 		TTL:  time.Unix(math.MaxInt64, 0),
 		Data: value,
 	}
-	return this.write(key, rec)
+	return rc.write(key, rec)
 }
 
-func (this fCache) Set(key string, value interface{}) (bool, error) {
-	rec, err := this.read(key)
+func (rc fCache) Set(key string, value interface{}) (bool, error) {
+	rec, err := rc.read(key)
 	if err != nil || rec == nil {
 		return false, err
 	}
 
 	rec.Data = value
-	return true, this.write(key, *rec)
+	return true, rc.write(key, *rec)
 }
 
-func (this fCache) Get(key string) (interface{}, error) {
-	rec, err := this.read(key)
+func (rc fCache) Get(key string) (interface{}, error) {
+	rec, err := rc.read(key)
 	if err != nil || rec == nil {
 		return nil, err
 	}
@@ -123,25 +123,25 @@ func (this fCache) Get(key string) (interface{}, error) {
 	return rec.Data, nil
 }
 
-func (this fCache) Exists(key string) (bool, error) {
-	rec, err := this.read(key)
+func (rc fCache) Exists(key string) (bool, error) {
+	rec, err := rc.read(key)
 	return rec == nil, err
 }
 
-func (this fCache) Forget(key string) error {
-	return this.delete(key)
+func (rc fCache) Forget(key string) error {
+	return rc.delete(key)
 }
 
-func (this fCache) Pull(key string) (interface{}, error) {
-	if v, err := this.Get(key); err != nil {
+func (rc fCache) Pull(key string) (interface{}, error) {
+	if v, err := rc.Get(key); err != nil {
 		return nil, err
 	} else {
-		return v, this.delete(key)
+		return v, rc.delete(key)
 	}
 }
 
-func (this fCache) TTL(key string) (time.Duration, error) {
-	rec, err := this.read(key)
+func (rc fCache) TTL(key string) (time.Duration, error) {
+	rec, err := rc.read(key)
 	if err != nil || rec == nil {
 		return -1, err
 	}
@@ -149,55 +149,55 @@ func (this fCache) TTL(key string) (time.Duration, error) {
 	return rec.TTL.UTC().Sub(time.Now().UTC()), nil
 }
 
-func (this fCache) Cast(key string) (caster.Caster, error) {
-	v, err := this.Get(key)
+func (rc fCache) Cast(key string) (caster.Caster, error) {
+	v, err := rc.Get(key)
 	return caster.NewCaster(v), err
 }
 
-func (this fCache) IncrementFloat(key string, value float64) (bool, error) {
-	if c, err := this.Cast(key); err != nil {
+func (rc fCache) IncrementFloat(key string, value float64) (bool, error) {
+	if c, err := rc.Cast(key); err != nil {
 		return false, err
 	} else {
 		if v, err := c.Float64(); err != nil {
-			return false, this.err(err.Error())
+			return false, rc.err(err.Error())
 		} else {
-			return this.Set(key, v+value)
+			return rc.Set(key, v+value)
 		}
 	}
 }
 
-func (this fCache) Increment(key string, value int64) (bool, error) {
-	if c, err := this.Cast(key); err != nil {
+func (rc fCache) Increment(key string, value int64) (bool, error) {
+	if c, err := rc.Cast(key); err != nil {
 		return false, err
 	} else {
 		if v, err := c.Int64(); err != nil {
-			return false, this.err(err.Error())
+			return false, rc.err(err.Error())
 		} else {
-			return this.Set(key, v+value)
+			return rc.Set(key, v+value)
 		}
 	}
 }
 
-func (this fCache) DecrementFloat(key string, value float64) (bool, error) {
-	if c, err := this.Cast(key); err != nil {
+func (rc fCache) DecrementFloat(key string, value float64) (bool, error) {
+	if c, err := rc.Cast(key); err != nil {
 		return false, err
 	} else {
 		if v, err := c.Float64(); err != nil {
-			return false, this.err(err.Error())
+			return false, rc.err(err.Error())
 		} else {
-			return this.Set(key, v-value)
+			return rc.Set(key, v-value)
 		}
 	}
 }
 
-func (this fCache) Decrement(key string, value int64) (bool, error) {
-	if c, err := this.Cast(key); err != nil {
+func (rc fCache) Decrement(key string, value int64) (bool, error) {
+	if c, err := rc.Cast(key); err != nil {
 		return false, err
 	} else {
 		if v, err := c.Int64(); err != nil {
-			return false, this.err(err.Error())
+			return false, rc.err(err.Error())
 		} else {
-			return this.Set(key, v-value)
+			return rc.Set(key, v-value)
 		}
 	}
 }

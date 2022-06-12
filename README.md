@@ -404,3 +404,15 @@ Exists() (bool, error)
 // Example:
 exists, err := vCode.Exists()
 ```
+
+#### TTL
+
+Get token ttl.
+
+```go
+// Signature:
+TTL() (time.Duration, error)
+
+// Example:
+ttl, err := vCode.TTl()
+```

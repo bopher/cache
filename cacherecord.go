@@ -14,17 +14,17 @@ type record struct {
 	Data interface{}
 }
 
-func (this record) Serialize() (string, error) {
+func (rc record) Serialize() (string, error) {
 	b := bytes.Buffer{}
 	e := gob.NewEncoder(&b)
-	err := e.Encode(this)
+	err := e.Encode(rc)
 	if err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b.Bytes()), nil
 }
 
-func (this *record) Deserialize(data string) error {
+func (rc *record) Deserialize(data string) error {
 	by, err := hex.DecodeString(data)
 	if err != nil {
 		return err
@@ -32,13 +32,13 @@ func (this *record) Deserialize(data string) error {
 	b := bytes.Buffer{}
 	b.Write(by)
 	d := gob.NewDecoder(&b)
-	err = d.Decode(this)
+	err = d.Decode(rc)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (this record) IsExpired() bool {
-	return this.TTL.UTC().Before(time.Now().UTC())
+func (rc record) IsExpired() bool {
+	return rc.TTL.UTC().Before(time.Now().UTC())
 }

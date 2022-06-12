@@ -13,23 +13,23 @@ type rLimiter struct {
 	cache Cache
 }
 
-func (this rLimiter) err(pattern string, params ...interface{}) error {
-	return utils.TaggedError([]string{"RateLimiter", this.key}, pattern, params...)
+func (rl rLimiter) err(pattern string, params ...interface{}) error {
+	return utils.TaggedError([]string{"RateLimiter", rl.key}, pattern, params...)
 }
 
-func (this rLimiter) notExistsErr() error {
-	return utils.TaggedError([]string{"RateLimiter", "NotExists", this.key}, "%s not exists", this.key)
+func (rl rLimiter) notExistsErr() error {
+	return utils.TaggedError([]string{"RateLimiter", "NotExists", rl.key}, "%s not exists", rl.key)
 }
 
-func (this *rLimiter) init(key string, maxAttempts uint32, ttl time.Duration, cache Cache) error {
-	this.key = key
-	this.max = maxAttempts
-	this.ttl = ttl
-	this.cache = cache
+func (rl *rLimiter) init(key string, maxAttempts uint32, ttl time.Duration, cache Cache) error {
+	rl.key = key
+	rl.max = maxAttempts
+	rl.ttl = ttl
+	rl.cache = cache
 
 	exists, err := cache.Exists(key)
 	if err != nil {
-		return this.err(err.Error())
+		return rl.err(err.Error())
 	}
 
 	if !exists {
@@ -39,53 +39,53 @@ func (this *rLimiter) init(key string, maxAttempts uint32, ttl time.Duration, ca
 	return nil
 }
 
-func (this rLimiter) Hit() error {
-	exists, err := this.cache.Decrement(this.key, 1)
+func (rl rLimiter) Hit() error {
+	exists, err := rl.cache.Decrement(rl.key, 1)
 	if err != nil {
-		return this.err(err.Error())
+		return rl.err(err.Error())
 	}
 
 	if !exists {
-		return this.notExistsErr()
+		return rl.notExistsErr()
 	}
 	return nil
 }
 
-func (this rLimiter) Lock() error {
-	exists, err := this.cache.Set(this.key, 0)
+func (rl rLimiter) Lock() error {
+	exists, err := rl.cache.Set(rl.key, 0)
 	if err != nil {
-		return this.err(err.Error())
+		return rl.err(err.Error())
 	}
 
 	if !exists {
-		return this.notExistsErr()
+		return rl.notExistsErr()
 	}
 
 	return nil
 }
 
-func (this rLimiter) Reset() error {
-	err := this.cache.Put(this.key, this.max, this.ttl)
+func (rl rLimiter) Reset() error {
+	err := rl.cache.Put(rl.key, rl.max, rl.ttl)
 	if err != nil {
-		return this.err(err.Error())
+		return rl.err(err.Error())
 	}
 
 	return nil
 }
 
-func (this rLimiter) Clear() error {
-	err := this.cache.Forget(this.key)
+func (rl rLimiter) Clear() error {
+	err := rl.cache.Forget(rl.key)
 	if err != nil {
-		return this.err(err.Error())
+		return rl.err(err.Error())
 	}
 
 	return nil
 }
 
-func (this rLimiter) MustLock() (bool, error) {
-	caster, err := this.cache.Cast(this.key)
+func (rl rLimiter) MustLock() (bool, error) {
+	caster, err := rl.cache.Cast(rl.key)
 	if err != nil {
-		return true, this.err(err.Error())
+		return true, rl.err(err.Error())
 	}
 
 	if caster.IsNil() {
@@ -94,37 +94,37 @@ func (this rLimiter) MustLock() (bool, error) {
 
 	v, err := caster.Int()
 	if err != nil {
-		err = this.err(err.Error())
+		err = rl.err(err.Error())
 	}
 	return v <= 0, err
 }
 
-func (this rLimiter) TotalAttempts() (uint32, error) {
-	caster, err := this.cache.Cast(this.key)
+func (rl rLimiter) TotalAttempts() (uint32, error) {
+	caster, err := rl.cache.Cast(rl.key)
 	if err != nil {
-		return this.max, this.err(err.Error())
+		return rl.max, rl.err(err.Error())
 	}
 
 	if caster.IsNil() {
-		return this.max, nil
+		return rl.max, nil
 	}
 
 	v, err := caster.Int()
 	if err != nil {
-		return this.max, this.err(err.Error())
+		return rl.max, rl.err(err.Error())
 	}
 
-	if v > int(this.max) {
-		v = int(this.max)
+	if v > int(rl.max) {
+		v = int(rl.max)
 	}
 
-	return this.max - uint32(v), nil
+	return rl.max - uint32(v), nil
 }
 
-func (this rLimiter) RetriesLeft() (uint32, error) {
-	caster, err := this.cache.Cast(this.key)
+func (rl rLimiter) RetriesLeft() (uint32, error) {
+	caster, err := rl.cache.Cast(rl.key)
 	if err != nil {
-		return 0, this.err(err.Error())
+		return 0, rl.err(err.Error())
 	}
 
 	if caster.IsNil() {
@@ -133,7 +133,7 @@ func (this rLimiter) RetriesLeft() (uint32, error) {
 
 	v, err := caster.Int()
 	if err != nil {
-		err = this.err(err.Error())
+		err = rl.err(err.Error())
 	}
 	if v < 0 {
 		v = 0
@@ -141,9 +141,9 @@ func (this rLimiter) RetriesLeft() (uint32, error) {
 	return uint32(v), err
 }
 
-func (this rLimiter) AvailableIn() (time.Duration, error) {
-	if v, err := this.cache.TTL(this.key); err != nil {
-		return 0, this.err(err.Error())
+func (rl rLimiter) AvailableIn() (time.Duration, error) {
+	if v, err := rl.cache.TTL(rl.key); err != nil {
+		return 0, rl.err(err.Error())
 	} else {
 		return v, nil
 	}

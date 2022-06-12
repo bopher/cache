@@ -1,5 +1,7 @@
 package cache
 
+import "time"
+
 // VerificationCode interface for verification code
 type VerificationCode interface {
 	// Set set code
@@ -14,4 +16,6 @@ type VerificationCode interface {
 	Get() (string, error)
 	// Exists check if code exists
 	Exists() (bool, error)
+	// TTL get ttl
+	TTL() (time.Duration, error)
 }
