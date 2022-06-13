@@ -46,7 +46,7 @@ A new value to cache.
 
 ```go
 // Signature:
-Put(key string, value interface{}, ttl time.Duration) error
+Put(key string, value any, ttl time.Duration) error
 
 // Example:
 err := rCache.Put("total-debt", 410203, 100 * time.Hour)
@@ -58,7 +58,7 @@ Put value with infinite ttl.
 
 ```go
 // Signature:
-PutForever(key string, value interface{}) error
+PutForever(key string, value any) error
 
 // Example:
 err := rCache.PutForever("base-discount", 10)
@@ -72,7 +72,7 @@ Change value of cache item and return false if item not exists (this. methods ke
 
 ```go
 // Signature:
-Set(key string, value interface{}) (bool, error)
+Set(key string, value any) (bool, error)
 
 // Example:
 ok, err := rCache.Set("base-discount", 15)
@@ -84,7 +84,7 @@ Get item from cache.
 
 ```go
 // Signature:
-Get(key string) (interface{}, error)
+Get(key string) (any, error)
 
 // Example:
 v, err := rCache.Get("total-users")
@@ -120,7 +120,7 @@ Item from cache and then remove it.
 
 ```go
 // Signature:
-Pull(key string) (interface{}, error)
+Pull(key string) (any, error)
 
 // Example:
 v, err := rCache.Pull("total-users")

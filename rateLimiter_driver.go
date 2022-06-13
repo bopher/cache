@@ -13,7 +13,7 @@ type rLimiter struct {
 	cache Cache
 }
 
-func (rl rLimiter) err(pattern string, params ...interface{}) error {
+func (rl rLimiter) err(pattern string, params ...any) error {
 	return utils.TaggedError([]string{"RateLimiter", rl.key}, pattern, params...)
 }
 

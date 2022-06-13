@@ -11,7 +11,7 @@ import (
 
 type record struct {
 	TTL  time.Time
-	Data interface{}
+	Data any
 }
 
 func (rc record) Serialize() (string, error) {

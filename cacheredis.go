@@ -15,7 +15,7 @@ type rCache struct {
 	client *redis.Client
 }
 
-func (rc rCache) err(pattern string, params ...interface{}) error {
+func (rc rCache) err(pattern string, params ...any) error {
 	return utils.TaggedError([]string{"RedisCache"}, pattern, params...)
 }
 
@@ -28,7 +28,7 @@ func (rc rCache) perfixer(key string) string {
 	return utils.ConcatStr("-", rc.prefix, key)
 }
 
-func (rc rCache) Put(key string, value interface{}, ttl time.Duration) error {
+func (rc rCache) Put(key string, value any, ttl time.Duration) error {
 	if err := rc.client.SetEX(
 		context.TODO(),
 		rc.perfixer(key),
@@ -40,7 +40,7 @@ func (rc rCache) Put(key string, value interface{}, ttl time.Duration) error {
 	return nil
 }
 
-func (rc rCache) PutForever(key string, value interface{}) error {
+func (rc rCache) PutForever(key string, value any) error {
 	if err := rc.client.Set(
 		context.TODO(),
 		rc.perfixer(key),
@@ -52,7 +52,7 @@ func (rc rCache) PutForever(key string, value interface{}) error {
 	return nil
 }
 
-func (rc rCache) Set(key string, value interface{}) (bool, error) {
+func (rc rCache) Set(key string, value any) (bool, error) {
 	exists, err := rc.Exists(key)
 	if err != nil || !exists {
 		return false, err
@@ -72,7 +72,7 @@ func (rc rCache) Set(key string, value interface{}) (bool, error) {
 	return true, err
 }
 
-func (rc rCache) Get(key string) (interface{}, error) {
+func (rc rCache) Get(key string) (any, error) {
 	v, err := rc.client.Get(
 		context.TODO(),
 		rc.perfixer(key),
@@ -110,7 +110,7 @@ func (rc rCache) Forget(key string) error {
 	return nil
 }
 
-func (rc rCache) Pull(key string) (interface{}, error) {
+func (rc rCache) Pull(key string) (any, error) {
 	if v, err := rc.Get(key); err != nil {
 		return nil, err
 	} else {

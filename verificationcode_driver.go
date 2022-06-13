@@ -11,7 +11,7 @@ type vcDriver struct {
 	cache Cache
 }
 
-func (vc vcDriver) err(pattern string, params ...interface{}) error {
+func (vc vcDriver) err(pattern string, params ...any) error {
 	return utils.TaggedError([]string{"VerificationCode", vc.key}, pattern, params...)
 }
 

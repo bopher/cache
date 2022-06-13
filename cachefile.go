@@ -19,7 +19,7 @@ type fCache struct {
 	dir    string
 }
 
-func (rc fCache) err(pattern string, params ...interface{}) error {
+func (rc fCache) err(pattern string, params ...any) error {
 	return utils.TaggedError([]string{"FileCache"}, pattern, params...)
 }
 
@@ -88,7 +88,7 @@ func (rc fCache) write(key string, record record) error {
 	return nil
 }
 
-func (rc fCache) Put(key string, value interface{}, ttl time.Duration) error {
+func (rc fCache) Put(key string, value any, ttl time.Duration) error {
 	rec := record{
 		TTL:  time.Now().UTC().Add(ttl),
 		Data: value,
@@ -96,7 +96,7 @@ func (rc fCache) Put(key string, value interface{}, ttl time.Duration) error {
 	return rc.write(key, rec)
 }
 
-func (rc fCache) PutForever(key string, value interface{}) error {
+func (rc fCache) PutForever(key string, value any) error {
 	rec := record{
 		TTL:  time.Unix(math.MaxInt64, 0),
 		Data: value,
@@ -104,7 +104,7 @@ func (rc fCache) PutForever(key string, value interface{}) error {
 	return rc.write(key, rec)
 }
 
-func (rc fCache) Set(key string, value interface{}) (bool, error) {
+func (rc fCache) Set(key string, value any) (bool, error) {
 	rec, err := rc.read(key)
 	if err != nil || rec == nil {
 		return false, err
@@ -114,7 +114,7 @@ func (rc fCache) Set(key string, value interface{}) (bool, error) {
 	return true, rc.write(key, *rec)
 }
 
-func (rc fCache) Get(key string) (interface{}, error) {
+func (rc fCache) Get(key string) (any, error) {
 	rec, err := rc.read(key)
 	if err != nil || rec == nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (rc fCache) Forget(key string) error {
 	return rc.delete(key)
 }
 
-func (rc fCache) Pull(key string) (interface{}, error) {
+func (rc fCache) Pull(key string) (any, error) {
 	if v, err := rc.Get(key); err != nil {
 		return nil, err
 	} else {
