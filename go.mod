@@ -3,7 +3,7 @@ module github.com/bopher/cache
 go 1.18
 
 require (
-	github.com/bopher/caster v1.2.2
+	github.com/bopher/caster v1.2.3
 	github.com/bopher/utils v1.7.3
 	github.com/go-redis/redis/v8 v8.11.5
 )
